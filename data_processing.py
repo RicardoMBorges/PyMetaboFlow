@@ -344,6 +344,50 @@ def align_samples_using_std(df):
 #aligned_df, shifts = align_samples_using_std(combined_df)
 ##
 
+### CENTER FUNTIONS
+import numpy as np
+import pandas as pd
+
+def log_transform(df, constant=1):
+    """
+    Applies a base-10 log transformation to the data.
+    Any zero or negative values will result in NaN, so ensure the data is positive.
+    
+    Parameters:
+    - df (pd.DataFrame): The DataFrame to transform.
+    
+    Returns:
+    - pd.DataFrame: Log-transformed DataFrame.
+    """
+    return np.log10(df + constant)
+
+def sqrt_transform(df):
+    """
+    Applies a square root transformation to the data.
+    Any negative values will result in NaN, so ensure the data is non-negative.
+    
+    Parameters:
+    - df (pd.DataFrame): The DataFrame to transform.
+    
+    Returns:
+    - pd.DataFrame: Square root-transformed DataFrame.
+    """
+    return np.sqrt(df.where(df >= 0))  # Ensure non-negative values only
+
+def cbrt_transform(df):
+    """
+    Applies a cube root transformation to the data.
+    Cube root transformation can handle both positive and negative values.
+    
+    Parameters:
+    - df (pd.DataFrame): The DataFrame to transform.
+    
+    Returns:
+    - pd.DataFrame: Cube root-transformed DataFrame.
+    """
+    return np.cbrt(df)
+
+
 
 ### NORMALIZATION FUNCTIONS
 def min_max_normalize(df):
@@ -360,36 +404,222 @@ def min_max_normalize(df):
 #normalized_df = min_max_normalize(combined_df.copy())
 ##
 
+import plotly.graph_objects as go
+import os
+import numpy as np
+from scipy.stats import norm
+import plotly.express as px
 
-# Z-score normalization.
-def z_score_normalize(df):
+import plotly.graph_objects as go
+import os
+import numpy as np
+from scipy.stats import norm
+import plotly.express as px
+
+import plotly.graph_objects as go
+import os
+import numpy as np
+from scipy.stats import norm
+
+import plotly.graph_objects as go
+import os
+import numpy as np
+from scipy.stats import norm
+
+def plot_histogram_with_distribution(data, output_dir='images', file_name='histogram_with_distribution_curve.html', log_scale=False, x_range=None):
+    """
+    Plots a horizontal histogram of data with an overlaid normal distribution curve.
+    
+    Parameters:
+    - data (pd.DataFrame): DataFrame with normalized data (already normalized), with one column for each sample.
+    - output_dir (str): Directory to save the HTML file.
+    - file_name (str): Name of the HTML file to save the plot.
+    - log_scale (bool): If True, apply a logarithmic scale to the x-axis.
+    - x_range (tuple): Tuple specifying the x-axis range as (min, max).
+    
+    Returns:
+    - fig (go.Figure): Plotly figure object of the histogram with distribution curve.
+    """
+    # Melt the DataFrame for easier plotting
+    melted_df = data.melt(value_name="Normalized Value")
+    
+    # Create the output directory if it does not exist
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Calculate mean and standard deviation for normal distribution
+    mean_val = melted_df["Normalized Value"].mean()
+    std_val = melted_df["Normalized Value"].std()
+    
+    # Generate x values for the normal curve
+    x_values = np.linspace(melted_df["Normalized Value"].min(), melted_df["Normalized Value"].max(), 100)
+    normal_curve = norm.pdf(x_values, mean_val, std_val)
+    
+    # Create the Plotly figure
+    fig = go.Figure()
+
+    # Add the histogram
+    fig.add_trace(go.Histogram(
+        x=melted_df["Normalized Value"], 
+        histnorm='probability density', 
+        opacity=0.6,
+        name='Normalized Data'
+    ))
+
+    # Add the normal distribution curve
+    fig.add_trace(go.Scatter(
+        x=x_values,
+        y=normal_curve,
+        mode='lines',
+        line=dict(color='blue', width=2),
+        name='Normal Distribution Curve'
+    ))
+
+    # Update layout
+    fig.update_layout(
+        title='Histogram with Normal Distribution Curve',
+        xaxis_title='Normalized Value',
+        yaxis_title='Density',
+        showlegend=True
+    )
+
+    # Apply log scale to the x-axis if specified
+    if log_scale:
+        fig.update_xaxes(type="log")
+
+    # Set x-axis range if specified
+    if x_range:
+        fig.update_xaxes(range=x_range)
+
+    # Display the plot in the notebook
+    #fig.show()
+
+    # Export the plot as an HTML file
+    fig.write_html(os.path.join(output_dir, file_name))
+    
+    return fig
+
+
+import pandas as pd
+
+### NORMALIZATION FUNCTIONS
+# Z-score normalization
+def z_score_normalize(df, exclude_columns=None):
     """
     Z-score normalization transforms the data to have a mean of 0 and a standard deviation of 1.
+    
+    Parameters:
+    - df (pd.DataFrame): The DataFrame to normalize.
+    - exclude_columns (list): List of columns to exclude from normalization.
+    
+    Returns:
+    - pd.DataFrame: A new DataFrame with normalized values.
     """
+    # Make a copy of the DataFrame to avoid modifying the original
+    df = df.copy()
+    exclude_columns = exclude_columns if exclude_columns else []
+    
     for column in df.columns:
-        if column != 'RT(min)':
+        if column not in exclude_columns:
             mean_val = df[column].mean()
             std_val = df[column].std()
-            df[column] = (df[column] - mean_val) / std_val
+            # Avoid division by zero
+            df[column] = (df[column] - mean_val) / std_val if std_val != 0 else df[column] - mean_val
     return df
 
-#normalized_df = z_score_normalize(combined_df.copy())
-##
 
-
-# Normalization by a Control.
-def normalize_by_control(df, control_column):
+# Normalization by a Control
+def normalize_by_control(df, control_column, exclude_columns=None):
     """
-    Normalization by a control is specific to experimental designs where a control feature is available.
+    Normalization by a control column, specific to designs where a control feature is available.
+    
+    Parameters:
+    - df (pd.DataFrame): The DataFrame to normalize.
+    - control_column (str): The column to use as the control for normalization.
+    - exclude_columns (list): List of columns to exclude from normalization.
+    
+    Returns:
+    - pd.DataFrame: A new DataFrame with normalized values.
     """
+    # Make a copy of the DataFrame to avoid modifying the original
+    df = df.copy()
+    exclude_columns = exclude_columns if exclude_columns else []
+    
     control = df[control_column]
     for column in df.columns:
-        if column != 'RT(min)' and column != control_column:
+        if column != control_column and column not in exclude_columns:
+            # Normalize each column by the control
             df[column] = df[column] / control
     return df
 
-#normalized_df = normalize_by_control(combined_df.copy(), 'ControlSample')
-##
+
+def pqn_normalize(df, reference=None):
+    """
+    Probabilistic Quotient Normalization (PQN) for each sample.
+    
+    Parameters:
+    - df (pd.DataFrame): The DataFrame with samples as columns.
+    - reference (pd.Series or None): The reference sample to calculate quotients. 
+      If None, the median of all samples is used as the reference.
+      
+    Returns:
+    - pd.DataFrame: PQN-normalized DataFrame.
+    """
+    df = df.copy()
+    
+    # Define reference as the median of all samples if none is provided
+    if reference is None:
+        reference = df.median(axis=1)
+    
+    # Calculate quotients for each sample
+    quotients = df.divide(reference, axis=0)
+    
+    # Calculate the median quotient for each sample (column)
+    median_quotients = quotients.median(axis=0)
+    
+    # Divide each sample by its median quotient
+    df = df.divide(median_quotients, axis=1)
+    
+    return df
+
+def std_dev_normalize(df):
+    """
+    Standard deviation normalization scales each column by its standard deviation.
+    
+    Parameters:
+    - df (pd.DataFrame): The DataFrame to normalize.
+    
+    Returns:
+    - pd.DataFrame: Standard deviation normalized DataFrame.
+    """
+    df = df.copy()
+    
+    for column in df.columns:
+        std_val = df[column].std()
+        if std_val != 0:
+            df[column] = df[column] / std_val
+    
+    return df
+
+def median_normalize(df, target_median=1.0):
+    """
+    Normalization by median scales each column to have the specified target median.
+    
+    Parameters:
+    - df (pd.DataFrame): The DataFrame to normalize.
+    - target_median (float): The median value to scale each column to (default is 1.0).
+    
+    Returns:
+    - pd.DataFrame: Median-normalized DataFrame.
+    """
+    df = df.copy()
+    
+    for column in df.columns:
+        median_val = df[column].median()
+        if median_val != 0:
+            df[column] = (df[column] / median_val) * target_median
+    
+    return df
+
 
 
 ### SCALING FUNCTIONS
@@ -441,6 +671,50 @@ def robust_scale(df):
 
 #scaled_df = robust_scale(combined_df.copy())
 ##
+import numpy as np
+import pandas as pd
+
+def mean_center(df):
+    """
+    Mean centers each column by subtracting its mean.
+    Parameters:
+    - df (pd.DataFrame): The DataFrame to mean center.
+    Returns:
+    - pd.DataFrame: Mean-centered DataFrame.
+    """
+    return df - df.mean()
+
+def auto_scale(df):
+    """
+    Auto scales each column by mean-centering and dividing by its standard deviation.
+    Parameters:
+    - df (pd.DataFrame): The DataFrame to auto scale.
+    Returns:
+    - pd.DataFrame: Auto-scaled DataFrame.
+    """
+    return (df - df.mean()) / df.std()
+
+def pareto_scale(df):
+    """
+    Pareto scales each column by mean-centering and dividing by the square root of its standard deviation.
+    Parameters:
+    - df (pd.DataFrame): The DataFrame to pareto scale.
+    Returns:
+    - pd.DataFrame: Pareto-scaled DataFrame.
+    """
+    return (df - df.mean()) / np.sqrt(df.std())
+
+def range_scale(df):
+    """
+    Range scales each column by mean-centering and dividing by its range (max - min).
+    Parameters:
+    - df (pd.DataFrame): The DataFrame to range scale.
+    Returns:
+    - pd.DataFrame: Range-scaled DataFrame.
+    """
+    return (df - df.mean()) / (df.max() - df.min())
+
+
 
 
 ### ANALYSIS
