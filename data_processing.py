@@ -5,6 +5,7 @@ import pandas as pd
 import glob
 import numpy as np
 from scipy.signal import correlate
+from pyicoshift import Icoshift
 
 ### USE
 # import data_processing as dp
@@ -343,6 +344,39 @@ def align_samples_using_std(df):
 # Align samples using standard deviation
 #aligned_df, shifts = align_samples_using_std(combined_df)
 ##
+
+def align_samples_using_icoshift(df):
+    ppm = df[:,0] #df.columns[0]]
+    ppmnp = ppm #.to_numpy()
+
+    X = df.transpose()
+    X = X[1:]
+    Xnp = X #.to_numpy()
+
+    # instance icoshift obj
+    fix_int_size = Icoshift()
+    # assign signals
+    fix_int_size.signals = Xnp
+    # assign scales for figures
+    fix_int_size.unit_vector = ppmnp
+
+    # set intervals / align mode
+    # shift relative to lac
+    fix_int_size.inter = ('n_intervals', 50)
+
+    # non default configs
+    fix_int_size.target = 'maxcorr'
+
+    # run the shifting
+    fix_int_size.run()
+
+    #we make the original data format
+    Xnew=np.concatenate((X[:1], fix_int_size.result), axis=0)
+    #Xnew=pd.DataFrame.from_records(fix_int_size.result)
+    #Xnew=pd.concat(X[0],Xnew)
+    Xnew=Xnew.transpose()
+    return Xnew
+
 
 ### CENTER FUNTIONS
 import numpy as np
@@ -931,11 +965,14 @@ def NMR_alignment(spectra, reference, method='PAFFT', seg_size=50, shift=None, l
         return PAFFT_alignment(spectra, reference, seg_size, shift)
     elif method == 'RAFFT':
         return RAFFT_alignment(spectra, reference, shift, lookahead)
+    elif method == 'icoshift':
+        return align_samples_using_icoshift(spectra)
     else:
         raise ValueError("Invalid method specified. Choose either 'PAFFT' or 'RAFFT'.")
 
 def PAFFT_alignment(spectra, reference, seg_size, shift=None):
-    if len(reference) != spectra.shape[1]:
+    print(len(reference),spectra.shape)
+    if len(reference) != spectra.shape[0]:
         raise ValueError("Reference and spectra must be of equal lengths.")
     elif len(reference) == 1:
         raise ValueError("Reference cannot be of length 1.")
